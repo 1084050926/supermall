@@ -4,29 +4,40 @@
     <nav-bar class="home-nav">
       <div slot="center">购物街</div>
     </nav-bar>
+    <tab-control
+      class="tab-control"
+      :titles="['流行','新款','精选']"
+      @tabClick="tabClick"
+      ref="tabControl1"
+      v-show="isFixed"
+    ></tab-control>
     <!-- 需要滚动的模块 -->
     <scroll
       class="content"
       ref="scroll"
       :probe-type="3"
-      @scroll="contentScrollBackTop"
+      @scroll="contentScroll"
       :pull-up-load="true"
-      @pullLoad="pullLoad"
+      @pullingUp="loadMore"
     >
       <!-- 轮播图 -->
-      <home-swiper :banners="banners"></home-swiper>
+      <home-swiper :banners="banners" @swiperImageLoad="swiperImageLoad"></home-swiper>
       <!-- 推荐模块 -->
       <recommend-view :recommends="recommends"></recommend-view>
       <!-- 本周流行模块 -->
       <feature-view></feature-view>
       <!-- 推荐导航栏模块 -->
-      <tab-control class="tab-control" :titles="['流行','新款','精选']" @tabClick="tabClick"></tab-control>
+      <tab-control
+        class="tab-control"
+        :titles="['流行','新款','精选']"
+        @tabClick="tabClick"
+        ref="tabControl2"
+      ></tab-control>
       <!-- 商品列表 -->
       <goods-list :goods="showGoods"></goods-list>
     </scroll>
-    <!-- 回到顶部模块 -->
-    <!-- @click.native 可以监听到组件里面的原生事件 -->
-    <back-top @click.native="backClick" v-show="isShow"></back-top>
+    <!-- 回到顶部 -->
+    <back-top @click.native="backClick" v-show="isShowBackTop" />
   </div>
 </template>
 
@@ -40,10 +51,14 @@ import NavBar from 'components/common/navbar/NavBar'
 import TabControl from 'components/content/tabControl/TabControl'
 import GoodsList from 'components/content/goods/GoodsList'
 import Scroll from 'components/common/scroll/Scroll'
-import BackTop from 'components/content/backTop/BackTop'
+
+
 
 // 网络请求
 import { getHomeMultidata, getHomeGoods } from 'network/home'
+
+
+import { itemListenerMixin, BackTopMixin } from 'common/mixin'
 
 
 
@@ -56,19 +71,13 @@ export default {
     HomeSwiper,
     RecommendView,
     featureView,
-
-
     NavBar,
     TabControl,
     GoodsList,
     Scroll,
-    BackTop,
-
-
-
 
   },
-
+  mixins: [itemListenerMixin, BackTopMixin],
   data () {
     return {
       banners: [],
@@ -89,8 +98,30 @@ export default {
         }
       },
       currentIype: 'pop',
-      isShow: false
+
+      tabOffsetTop: 0,
+      isFixed: false,
+      saveY: 0
     }
+  },
+  destroyed () {
+    this.$bus.$off('itemImgLoad', itemListenerMixin)
+    console.log('itemListenerMixin');
+  },
+  // activated()和deactivated()只有在<keep-alive></keep-alive>包裹的时候才有效；
+  // 进入组件时执行
+  activated () {
+    // 在进入home时滚动到最新的saveY值
+    this.$refs.scroll.refresh()
+    this.$refs.scroll.scrollTo(0, this.saveY, 0)
+    // console.log(this.saveY);
+
+  },
+  // 离开组件时执行
+  deactivated () {
+    // 当离开home时将离开前所在的位置赋值给this.saveY
+    this.saveY = this.$refs.scroll.getScrollY()
+    // console.log(this.saveY)
   },
   computed: {
     // 列表展示
@@ -107,6 +138,8 @@ export default {
     this.getHomeGoods('new')
     this.getHomeGoods('sell')
   },
+  mounted () {
+  },
   methods: {
     /* 
     事件监听相关的方法
@@ -122,26 +155,33 @@ export default {
           break;
         case 2:
           this.currentIype = 'sell'
+          break
       }
-    },
-    // 回到顶部小图标点击事件
-    backClick () {
-      // 点击访问Scroll的实例的scrollTo(x,y,时间)实现回到顶部功能
-      // console.log(this.$refs.scroll.scroll);
-      // console.log();
-      // this.$refs.scroll.scroll.scrollTo(0, 0)
-      this.$refs.scroll.scrollTo(0, 0)
-    },
-    // 回到顶部小图标显示隐藏事件
-    contentScrollBackTop (position) {
-      // 当position.y值大于1000的时候就把回到顶部图标显示出来
-      this.isShow = -position.y > 2000
-    },
-    // 上拉加载事件
-    pullLoad () {
-      this.getHomeGoods(this.currentIype)
+      this.$refs.tabControl1.currentIndex = index
+      this.$refs.tabControl2.currentIndex = index
     },
 
+    // 监听滚动事件
+    contentScroll (position) {
+      // 1·backTop显示与隐藏
+      // 当position.y值大于1000的时候就把回到顶部图标显示出来
+      // this.isShowBackTop = -position.y > 2000
+
+      this.isFixed = -position.y > this.tabOffsetTop
+      this.listenShowBackTop(position)
+
+
+
+    },
+    // 上拉到底部的时候再次请求数据
+    loadMore () {
+      this.getHomeGoods(this.currentIype)
+    },
+    // 监听轮播图片加载完成后获取tab-control的offsetTop值
+    swiperImageLoad () {
+      //所有组件都有一个属性$el: 用于获取组件中的元素
+      this.tabOffsetTop = this.$refs.tabControl2.$el.offsetTop
+    },
 
 
     /**
@@ -162,7 +202,8 @@ export default {
 
         this.goods[type].list.push(...res.data.list)
         this.goods[type].page += 1
-        // 当加载完成后调用finishPullUp()进行重新加载
+
+        // 完成上拉加载更多
         this.$refs.scroll.finishPullUp()
       })
     }
@@ -179,19 +220,14 @@ export default {
 .home-nav {
   background-color: var(--color-tint);
   color: #fff;
-  position: fixed;
+  /* position: fixed;
   top: 0;
   right: 0;
   left: 0;
   bottom: 0;
-  z-index: 9;
+  z-index: 9; */
 }
-.tab-control {
-  /* 向上滚动是元素往上滚 */
-  /* 当元素小于44px之前 position为相对定位，之后position为固定定位*/
-  position: sticky;
-  top: 44px;
-}
+
 /* 需要scroll的部分 */
 .content {
   position: absolute;
@@ -200,7 +236,9 @@ export default {
   left: 0;
   right: 0;
   overflow: hidden;
-
-  overflow: hidden;
+}
+.tab-control {
+  position: relative;
+  z-index: 9;
 }
 </style>

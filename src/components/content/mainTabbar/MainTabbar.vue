@@ -36,7 +36,4 @@ export default {
 </script>
 
 <style>
-.MainTabBar {
-  z-index: 10;
-}
 </style>

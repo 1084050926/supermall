@@ -1,7 +1,9 @@
 <template>
   <div id="app">
     <!-- 使用组件 -->
-    <router-view />
+    <keep-alive exclude="Detail">
+      <router-view />
+    </keep-alive>
     <main-tab-bar />
   </div>
 </template>

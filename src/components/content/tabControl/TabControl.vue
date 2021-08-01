@@ -40,7 +40,7 @@ export default {
 }
 </script>
 
-<style>
+<style scoped>
 .tabControl {
   display: flex;
   height: 40px;
